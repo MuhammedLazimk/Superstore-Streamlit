@@ -3,13 +3,20 @@ import plotly.express as px
 import streamlit as st
 import pandas as pd
 import numpy as np
-st.set_page_config( page_title=" 📊 Superstore Dashboard",
-                   layout="wide"
-                   )
+
+st.set_page_config(
+    page_title="Superstore Dashboard",
+    page_icon="📊",
+    layout="wide"
+)
+
+
+st.title("📊 Superstore Dashboard")
+st.markdown("Interactive dashboard for Superstore sales analysis")
 
 
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=600)  
 def load_data():
     return pd.read_csv(
         r"C:\Users\mhdlz\OneDrive\Desktop\project_4.1\Data\superstore_clean.csv",
@@ -18,21 +25,17 @@ def load_data():
 
 try:
     df = load_data()
-    if st.sidebar.button("🔄️ Refresh data"):
-        st.cache_data.clear()
-        st.rerun()
 except Exception as e:
     st.error(f"Error loading file: {e}")
     st.stop()
 
+if st.button("refresh data"):
+    st.cache_data.clear()  
+    st.rerun()
 
 
-st.title("📊 Superstore Dashboard")
-st.markdown("Interactive dashboard for Superstore sales analysis")
 
-df["order_year"] = df["order_date"].dt.year
 
-df["month_period"] = df["order_date"].dt.strftime("%b")
 
 
 with st.sidebar:
@@ -73,16 +76,38 @@ filtered = filtered[
     )
 ]
 
-filtered["month_period"] = filtered["order_date"].dt.strftime("%b")
-
 csv_bytes = filtered.to_csv(index=False).encode("utf-8")
-
 st.sidebar.download_button(
-    label="⬇️ Download filtered data",
+    "Download Filtered Data",
     data=csv_bytes,
-    file_name="superstore_filtered.csv",
+    file_name="filtered_superstore.csv",
     mime="text/csv"
 )
+
+
+arr = pd.to_numeric(df["discount"], errors="coerce").dropna().to_numpy(dtype=float)
+if arr.size > 0:
+    per75 = np.percentile(arr, 75)
+else:
+    per75 = 0.0
+high = df[pd.to_numeric(df["discount"], errors="coerce") > per75]
+
+print(f"75th percentile of discount: {per75:.2f}")
+print(f"Number of high discount records: {len(high)}")
+
+
+    
+sales_arr = pd.to_numeric(filtered["sales"], errors="coerce").dropna().to_numpy(dtype=float)
+if sales_arr.size == 0:
+        z = np.array([])
+else:
+        std = np.std(sales_arr)
+        if std == 0:
+            z = np.zeros_like(sales_arr)
+        else:
+            z = (sales_arr - np.mean(sales_arr)) / std
+outliers = filtered.iloc[np.where(np.abs(z) > 2)[0]] if z.size > 0 else filtered.iloc[0:0]
+print(f"outliers detected: {len(outliers)}")
 
 
 
@@ -108,6 +133,7 @@ with col3:
         "Average Discount",
         f"{filtered['discount'].mean():.1%}"
     )
+
 
 
 col1, col2 = st.columns(2)
@@ -152,7 +178,6 @@ monthly_sales.index = monthly_sales.index.astype(str)
 st.line_chart(monthly_sales)
 
 
-
 st.subheader("Filtered Data")
 
 st.dataframe(
@@ -171,69 +196,22 @@ st.download_button(
     file_name="filtered_superstore.csv",
     mime="text/csv"
 )
-st.subheader("Custom Chart Generator")
-
-with st.form("chart_form"):
-
-    chart_type = st.selectbox(
-        "Choose Chart Type",
-        ["Bar", "Line", "Pie"]
-    )
-
-    submitted = st.form_submit_button("Generate")
-
-if submitted:
-
-    chart_data = (
-        filtered.groupby("category")["sales"]
-        .sum()
-        .reset_index()
-    )
-
-    if chart_type == "Bar":
-        fig = px.bar(
-            chart_data,
-            x="category",
-            y="sales",
-            title="Sales by Category"
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-    elif chart_type == "Line":
-        fig = px.line(
-            chart_data,
-            x="category",
-            y="sales",
-            markers=True,
-            title="Sales by Category"
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-    elif chart_type == "Pie":
-        fig = px.pie(
-            chart_data,
-            names="category",
-            values="sales",
-            title="Sales by Category"
-        )
-        st.plotly_chart(fig, use_container_width=True)
 
 
-tab1, tab2, tab3,tab4 = st.tabs(
-    [
-        "📋 Overview",
-        "📦 By Category",
-        "🗺️ By Region",
-        "🚨Quality Alerts"
-    ]
+
+tab1, tab2, tab3, tab4= st.tabs(
+    ["📋 Overview", "📦 By Category", "🗺️ By Region", "🚨 Quality Alerts"]
 )
 
 
 with tab1:
     st.subheader("Filtered Data Preview")
 
+    df["order_year"] = df["order_date"].dt.year
+    df["month_period"] = df["order_date"].dt.strftime("%b")
+
     monthly_sales = (
-    filtered.groupby(["order_year", "month_period"], as_index=False)["sales"]
+    df.groupby(["order_year", "month_period"], as_index=False)["sales"]
       .sum()
     )
 
@@ -251,9 +229,9 @@ with tab2:
     st.subheader("Sales by Category")
 
     top10_subcat = (
-    filtered.groupby("sub_category")["sales"]
+    df.groupby("sub_category")["sales"]
       .sum()
-      .nlargest(10)          
+      .nlargest(10)        
       .sort_values()         
     )
 
@@ -261,11 +239,12 @@ with tab2:
 
     bars = ax.barh(
     top10_subcat.index,
-    top10_subcat.values, 
+    top10_subcat.values,
     color="#3B82F6"
 
     )
 
+  
     ax.bar_label(
     bars,
     fmt="${:,.0f}",
@@ -281,11 +260,11 @@ with tab2:
     plt.close(fig)
 
     fig = px.scatter(
-    filtered,
+    df,
     x="sales",
     y="profit",
-    color="category",          
-    size="quantity",          
+    color="category",         
+    size="quantity",           
     hover_data=["sub_category"],
     title="Sales vs Profit by Category"
     )
@@ -315,75 +294,115 @@ with tab3:
 
     st.subheader("Sales by Region")
 
+    
     region_profit = (
-        filtered.groupby("region")["profit"]
-          .sum()
-          .reset_index()
+    filtered.groupby("region")["profit"]
+      .sum()
+      .reset_index()
     )
 
     fig = px.pie(
-        region_profit,
-        names="region",
-        values="profit",
-        hole=0.4,
-        title="Region Share of Total Profit"
+    region_profit,
+    names="region",
+    values="profit",
+    hole=0.4,
+    title="Region Share of Total Profit"
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
 with tab4:
-    st.subheader("Quality Alert")
+    st.subheader("Quality Alerts")
 
-    disc_arr = filtered["discount"].values
-    p75 = np.percentile(disc_arr, 75)
-    high_disc = filtered[disc_arr > p75]
-    high_disc_n = len(high_disc)
+    mean_margin = (filtered["profit"].sum() / filtered["sales"].sum()) * 100
 
-    st.info(
-        f"{high_disc_n} orders have discount above the 75th percentile "
-        f"({p75:.0%})."
-    )
-
-    st.subheader("Profit Margin Alert")
-    total_sales = filtered["sales"].sum()
-    total_profit = filtered["profit"].sum()
-
-    if total_sales > 0:
-        profit_margin = (total_profit / total_sales) * 100
+    if mean_margin < 10:
+         st.error(f"critical {mean_margin:.2f}% - urgent action needed!")
+    elif mean_margin < 20:
+        st.warning(f"moderate {mean_margin:.2f}% - improvement needed!")
     else:
-        profit_margin = 0.0
+        st.success(f"healthy {mean_margin:.2f}% - good performance!")
 
-    margin_formatted = f"{profit_margin:.1f}%"
 
-    if profit_margin < 10:
-        st.error(f"Low Profit Margin! Current margin is {margin_formatted}.")
-    elif profit_margin < 20:
-        st.warning(f"Moderate Profit Margin. Current margin is {margin_formatted}.")
+    st.info(f"75th percentile of discount: {per75:.2f}")
+    if len(high) > 0:
+        st.warning(f"Number of high discount records: {len(high)}")
     else:
-        st.success(f"Healthy Profit Margin! Current margin is {margin_formatted}.")
+        st.success("No high discount records found.")
 
-    
-    sales_arr = filtered["sales"].values
-    z_scores = (sales_arr - sales_arr.mean()) / sales_arr.std()
-    outlier_mask = np.abs(z_scores) > 3
-    outlier_rows = filtered[outlier_mask][["order_id", "order_date", "sales", "profit", "region"]]
-    outlier_n = len(outlier_rows)
-
-    if outlier_n > 0:
-        st.warning(f"{outlier_n} outlier order(s) detected with unusually high or low sales (|z-score| > 3).")
-    else:
-        st.success("No sales outliers detected.")
-
-    with st.expander("View Outlier Rows"):
-        st.dataframe(outlier_rows, use_container_width=True, hide_index=True)
-
-    with st.expander("Show Raw Data (First 50 Rows):"):
+    with st.expander("show raw data(first 50 rows)"):
         st.dataframe(filtered.head(50), use_container_width=True)
 
 
+bar_sales = filtered.groupby("category")["sales"].sum().sort_values(ascending=False)
+fig_bar, ax = plt.subplots(figsize=(7, 4))
+ax.barh(bar_sales.index.astype(str), bar_sales.to_numpy(dtype=float), color="#3B82F6")
+ax.set_title("Sales by Category")
+ax.set_xlabel("Sales ($)")
+ax.set_ylabel("Category")
+fig_bar.tight_layout()
+
+monthly_sales_export = (
+    filtered.groupby(filtered["order_date"].dt.to_period("M"))["sales"]
+    .sum()
+    .reset_index()
+)
+monthly_sales_export["order_month"] = monthly_sales_export["order_date"].astype(str)
+
+fig_line = px.line(
+    monthly_sales_export,
+    x="order_month",
+    y="sales",
+    title="Monthly Sales Trend"
+)
+
+fig_scatter = px.scatter(
+    filtered,
+    x="sales",
+    y="profit",
+    color="category",
+    size="quantity",
+    hover_data=["sub_category"],
+    title="Sales vs Profit by Category"
+)
+
+fig_donut = px.pie(
+    filtered.groupby("region")["profit"].sum().reset_index(),
+    names="region",
+    values="profit",
+    hole=0.4,
+    title="Region Share of Total Profit"
+)
+
+with st.form("export"):
+    chart_type = st.selectbox(
+        "Select chart to display",
+        [
+            "Bar Chart",
+            "Line Chart",
+            "Scatter Plot",
+            "Donut Chart"
+        ]
+    )
+
+    submitted = st.form_submit_button("Generate Chart")
+
+if submitted:
+    if chart_type == "Bar Chart":
+        st.pyplot(fig_bar)
+
+    elif chart_type == "Line Chart":
+        st.plotly_chart(fig_line, use_container_width=True)
+
+    elif chart_type == "Scatter Plot":
+        st.plotly_chart(fig_scatter, use_container_width=True)
+
+    elif chart_type == "Donut Chart":
+        st.plotly_chart(fig_donut, use_container_width=True)
 
 
 
+    
 
 
 
@@ -397,5 +416,5 @@ max_year = filtered["order_year"].max()
 st.caption(
     f"Showing {row_count:,} rows • "
     f"{min_year}–{max_year} • "
-    f"Built by Muhammed Laizm"
+    f"Built by Muhammed Lazim"
 )
